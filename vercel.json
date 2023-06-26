@@ -1,6 +1,6 @@
 {
   "functions": {
-    "api/**/*": {
+    "api/process": {
       "runtime": "python3.9"
     }
   }

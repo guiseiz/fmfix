@@ -1,8 +1,6 @@
 import os
 import re
 import random
-from http.server import BaseHTTPRequestHandler
-from urllib.parse import parse_qs
 
 folder_max_assets = {
     'EECA': 15999,
@@ -21,68 +19,54 @@ folder_max_assets = {
     'YugoGreek': 9999
 }
 
-class RequestHandler(BaseHTTPRequestHandler):
-    def do_POST(self):
-        content_length = int(self.headers['Content-Length'])
-        body = self.rfile.read(content_length)
-        qs = parse_qs(body.decode('utf-8'))
+def correct_asset_names(input_data):
+    lines = input_data.splitlines()
 
-        if 'file' not in qs:
-            self.send_response(400)
-            self.end_headers()
-            self.wfile.write(b'File parameter is missing.')
-            return
+    output_lines = []
+    for line in lines:
+        match = re.search(r'from="([^"]+)/([^"]+)"', line)
+        if match:
+            folder = match.group(1)
+            asset = match.group(2)
 
-        file_data = qs['file'][0]
-        filename = 'config.xml'
-        with open(filename, 'wb') as f:
-            f.write(file_data.encode('utf-8'))
+            if folder == 'UserAdded':
+                output_lines.append(line)
+                continue
 
-        corrected_filename = 'corrected_config.xml'
-        correct_asset_names(filename, corrected_filename)
+            if folder in folder_max_assets:
+                asset_match = re.match(r'([a-zA-Z\s]+)(\d+)', asset)
+                if asset_match:
+                    asset_name = asset_match.group(1)
+                    asset_number = int(asset_match.group(2))
+                    if asset_name != folder or asset_number > folder_max_assets[folder]:
+                        asset_name = folder
+                        asset_number = random.randint(1, folder_max_assets[folder])
+                        line = line.replace(match.group(0), f'from="{folder}/{asset_name}{asset_number}"')
+        output_lines.append(line)
 
-        with open(corrected_filename, 'rb') as f:
-            corrected_file_data = f.read()
+    return '\n'.join(output_lines)
 
-        os.remove(filename)
-        os.remove(corrected_filename)
+def handle_request(request):
+    if request.method != 'POST':
+        return {
+            'statusCode': 405,
+            'body': 'Method Not Allowed'
+        }
 
-        self.send_response(200)
-        self.send_header('Content-Disposition', 'attachment; filename=corrected_config.xml')
-        self.send_header('Content-Type', 'application/xml')
-        self.send_header('Content-Length', str(len(corrected_file_data)))
-        self.end_headers()
-        self.wfile.write(corrected_file_data)
+    if 'file' not in request.files:
+        return {
+            'statusCode': 400,
+            'body': 'File parameter is missing.'
+        }
 
-def correct_asset_names(input_filename, output_filename):
-    with open(input_filename, 'r') as file:
-        lines = file.readlines()
+    file_data = request.files['file'].decode('utf-8')
+    corrected_file_data = correct_asset_names(file_data)
 
-    with open(output_filename, 'w') as file:
-        for line in lines:
-            match = re.search(r'from="([^"]+)/([^"]+)"', line)
-            if match:
-                folder = match.group(1)
-                asset = match.group(2)
-
-                if folder == 'UserAdded':
-                    file.write(line)
-                    continue
-
-                if folder in folder_max_assets:
-                    asset_match = re.match(r'([a-zA-Z\s]+)(\d+)', asset)
-                    if asset_match:
-                        asset_name = asset_match.group(1)
-                        asset_number = int(asset_match.group(2))
-                        if asset_name != folder or asset_number > folder_max_assets[folder]:
-                            asset_name = folder
-                            asset_number = random.randint(1, folder_max_assets[folder])
-                            line = line.replace(match.group(0), f'from="{folder}/{asset_name}{asset_number}"')
-            file.write(line)
-
-if __name__ == '__main__':
-    from http.server import HTTPServer
-    server_address = ('', 8000)
-    httpd = HTTPServer(server_address, RequestHandler)
-    print('Starting server...')
-    httpd.serve_forever()
+    return {
+        'statusCode': 200,
+        'headers': {
+            'Content-Disposition': 'attachment; filename=corrected_config.xml',
+            'Content-Type': 'application/xml'
+        },
+        'body': corrected_file_data
+    }
