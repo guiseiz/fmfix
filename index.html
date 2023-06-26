@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>XML File Processor</title>
+</head>
+<body>
+  <input type="file" id="fileInput">
+  <button onclick="processFile()">Correct My Config</button>
+
+  <script>
+    function processFile() {
+      const fileInput = document.getElementById('fileInput');
+      const file = fileInput.files[0];
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      fetch('/process', {
+        method: 'POST',
+        body: formData
+      })
+      .then(response => response.blob())
+      .then(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'corrected_config.xml';
+        a.click();
+      })
+      .catch(error => console.error(error));
+    }
+  </script>
+</body>
+</html>
